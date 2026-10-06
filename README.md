@@ -29,7 +29,7 @@ The project is a sibling of `app-react-native` and `app-kmp`: it keeps the featu
 
 ### Foundation
 
-- [ ] Bootstrap Flutter project and pin Flutter/Dart versions.
+- [x] Bootstrap Flutter project and pin Flutter/Dart versions.
 - [ ] Set the iOS deployment target to 15+.
 - [ ] Validate Android and iOS builds.
 - [ ] Add Staging and Production environments.
