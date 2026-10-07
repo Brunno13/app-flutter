@@ -1,5 +1,6 @@
 import 'dart:io';
 
+const _androidIdentityPropertiesPath = 'android/app/AppIdentity.properties';
 const _configPath = 'ci/artifacts.env';
 const _androidBuildPath = 'android/app/build.gradle.kts';
 const _androidManifestPath = 'android/app/src/main/AndroidManifest.xml';
@@ -28,6 +29,9 @@ void main(List<String> args) {
     appScheme: _required(config, 'APP_SCHEME'),
     iosBundleIdentifier: _required(config, 'IOS_BUNDLE_IDENTIFIER'),
     iosBundleName: _required(config, 'IOS_BUNDLE_NAME'),
+    stagingNameSuffix: _required(config, 'APP_STAGING_NAME_SUFFIX'),
+    stagingIdSuffix: _required(config, 'APP_STAGING_ID_SUFFIX'),
+    stagingSchemeSuffix: _required(config, 'APP_STAGING_SCHEME_SUFFIX'),
   );
 
   _validateIdentity(identity);
@@ -43,9 +47,8 @@ void _apply(AppIdentity identity) {
   stdout.writeln('Applying application identity...');
 
   _updatePubspec(identity);
-  _updateAndroidBuild(identity);
-  _updateAndroidAppScheme(identity);
-  _updateAndroidManifest(identity);
+  _updateAndroidIdentityProperties(identity);
+  _updateAndroidManifest();
   _updateAndroidMainActivity(identity);
   _updateIosIdentityConfig(identity);
   _updateIosConfigIncludes();
@@ -62,15 +65,17 @@ void _check(AppIdentity identity) {
   final failures = <String>[];
 
   _checkPubspec(identity, failures);
-  _checkAndroidBuild(identity, failures);
-  _checkAndroidManifest(identity, failures);
+
+  _checkAndroidIdentityProperties(identity, failures);
+  _checkAndroidManifest(failures);
   _checkAndroidMainActivity(identity, failures);
+  _checkAndroidDeepLinkManifest(failures);
+  _checkAndroidFlavors(failures);
+
   _checkIosIdentityConfig(identity, failures);
   _checkIosConfigIncludes(failures);
   _checkIosInfoPlist(failures);
   _checkIosProjectBundleIdentifiers(failures);
-  _checkAndroidAppScheme(identity, failures);
-  _checkAndroidDeepLinkManifest(failures);
   _checkIosAppScheme(failures);
 
   if (failures.isNotEmpty) {
@@ -89,20 +94,6 @@ void _check(AppIdentity identity) {
   stdout.writeln('APP_IDENTITY_CHECK=PASS');
 }
 
-void _checkAndroidAppScheme(AppIdentity identity, List<String> failures) {
-  final content = File(_androidBuildPath).readAsStringSync();
-
-  final expected =
-      'manifestPlaceholders["appScheme"] = "${identity.appScheme}"';
-
-  if (!content.contains(expected)) {
-    failures.add(
-      'Android app scheme differs from '
-      'APP_SCHEME=${identity.appScheme}',
-    );
-  }
-}
-
 void _checkAndroidDeepLinkManifest(List<String> failures) {
   final content = File(_androidManifestPath).readAsStringSync();
 
@@ -116,6 +107,38 @@ void _checkAndroidDeepLinkManifest(List<String> failures) {
   for (final fragment in requiredFragments) {
     if (!content.contains(fragment)) {
       failures.add('Android deep-link manifest is missing: $fragment');
+    }
+  }
+}
+
+void _checkAndroidFlavors(List<String> failures) {
+  final file = File(_androidBuildPath);
+
+  if (!file.existsSync()) {
+    failures.add('Missing $_androidBuildPath');
+    return;
+  }
+
+  final content = file.readAsStringSync();
+
+  final requiredFragments = [
+    'import java.util.Properties',
+    'file("AppIdentity.properties")',
+    'appIdentity("androidNamespace")',
+    'appIdentity("androidApplicationId")',
+    'flavorDimensions += "environment"',
+    'create("production")',
+    'create("staging")',
+    'appIdentity("productionDisplayName")',
+    'appIdentity("productionAppScheme")',
+    'appIdentity("stagingApplicationId")',
+    'appIdentity("stagingDisplayName")',
+    'appIdentity("stagingAppScheme")',
+  ];
+
+  for (final fragment in requiredFragments) {
+    if (!content.contains(fragment)) {
+      failures.add('Android flavor configuration is missing: $fragment');
     }
   }
 }
@@ -176,14 +199,24 @@ String _required(Map<String, String> config, String key) {
     throw StateError('Missing required configuration: $key');
   }
 
-  return value.trim();
+  // Do not trim the returned value.
+  //
+  // Quoted values may intentionally contain leading or trailing spaces.
+  // Example:
+  //
+  // APP_STAGING_NAME_SUFFIX=" (staging)"
+  //
+  // _readEnvFile already trims unquoted values before storing them.
+  return value;
 }
 
 void _validateIdentity(AppIdentity identity) {
   final dartPackagePattern = RegExp(r'^[a-z][a-z0-9_]*$');
+
   final androidIdPattern = RegExp(
     r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$',
   );
+
   final schemePattern = RegExp(r'^[a-z][a-z0-9+.-]*$');
 
   if (!dartPackagePattern.hasMatch(identity.dartPackageName)) {
@@ -201,6 +234,14 @@ void _validateIdentity(AppIdentity identity) {
     );
   }
 
+  if (!androidIdPattern.hasMatch(identity.stagingApplicationId)) {
+    throw StateError(
+      'Invalid staging Android application ID derived from '
+      'ANDROID_APPLICATION_ID + APP_STAGING_ID_SUFFIX: '
+      '${identity.stagingApplicationId}',
+    );
+  }
+
   final iosBundleIdPattern = RegExp(r'^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$');
 
   if (!iosBundleIdPattern.hasMatch(identity.iosBundleIdentifier)) {
@@ -212,6 +253,14 @@ void _validateIdentity(AppIdentity identity) {
 
   if (!schemePattern.hasMatch(identity.appScheme)) {
     throw StateError('Invalid APP_SCHEME: ${identity.appScheme}');
+  }
+
+  if (!schemePattern.hasMatch(identity.stagingAppScheme)) {
+    throw StateError(
+      'Invalid staging app scheme derived from '
+      'APP_SCHEME + APP_STAGING_SCHEME_SUFFIX: '
+      '${identity.stagingAppScheme}',
+    );
   }
 }
 
@@ -254,6 +303,7 @@ void _replaceDartPackageImports(String oldPackage, String newPackage) {
       }
 
       final original = entity.readAsStringSync();
+
       final updated = original.replaceAll(
         'package:$oldPackage/',
         'package:$newPackage/',
@@ -266,55 +316,22 @@ void _replaceDartPackageImports(String oldPackage, String newPackage) {
   }
 }
 
-void _updateAndroidBuild(AppIdentity identity) {
-  final file = File(_androidBuildPath);
-  var content = file.readAsStringSync();
+void _updateAndroidManifest() {
+  final file = File(_androidManifestPath);
 
-  content = content.replaceFirst(
-    RegExp(r'namespace\s*=\s*"[^"]+"'),
-    'namespace = "${identity.androidNamespace}"',
-  );
-
-  content = content.replaceFirst(
-    RegExp(r'applicationId\s*=\s*"[^"]+"'),
-    'applicationId = "${identity.androidApplicationId}"',
-  );
-
-  file.writeAsStringSync(content);
-}
-
-void _updateAndroidAppScheme(AppIdentity identity) {
-  final file = File(_androidBuildPath);
-  var content = file.readAsStringSync();
-
-  final expected =
-      'manifestPlaceholders["appScheme"] = "${identity.appScheme}"';
-
-  final existing = RegExp(r'manifestPlaceholders\["appScheme"\]\s*=\s*"[^"]*"');
-
-  if (existing.hasMatch(content)) {
-    content = content.replaceFirst(existing, expected);
-  } else {
-    const anchor = 'defaultConfig {';
-
-    if (!content.contains(anchor)) {
-      throw StateError('Unable to locate defaultConfig in $_androidBuildPath');
-    }
-
-    content = content.replaceFirst(anchor, '$anchor\n        $expected');
+  if (!file.existsSync()) {
+    throw StateError('Missing $_androidManifestPath');
   }
 
-  file.writeAsStringSync(content);
-}
-
-void _updateAndroidManifest(AppIdentity identity) {
-  final file = File(_androidManifestPath);
   var content = file.readAsStringSync();
 
-  content = content.replaceFirst(
-    RegExp(r'android:label="[^"]*"'),
-    'android:label="${identity.displayName}"',
-  );
+  final labelPattern = RegExp(r'android:label="[^"]*"');
+
+  if (!labelPattern.hasMatch(content)) {
+    throw StateError('Unable to locate android:label in $_androidManifestPath');
+  }
+
+  content = content.replaceFirst(labelPattern, r'android:label="${appName}"');
 
   file.writeAsStringSync(content);
 }
@@ -373,6 +390,28 @@ void _updateAndroidMainActivity(AppIdentity identity) {
   _removeEmptyParents(source.parent, kotlinRoot);
 }
 
+String _androidIdentityPropertiesContent(AppIdentity identity) {
+  return '''
+# Generated from ci/artifacts.env by tool/configure_app.dart.
+# Do not edit manually.
+androidNamespace=${identity.androidNamespace}
+androidApplicationId=${identity.androidApplicationId}
+productionDisplayName=${identity.displayName}
+productionAppScheme=${identity.appScheme}
+stagingApplicationId=${identity.stagingApplicationId}
+stagingDisplayName=${identity.stagingDisplayName}
+stagingAppScheme=${identity.stagingAppScheme}
+''';
+}
+
+void _updateAndroidIdentityProperties(AppIdentity identity) {
+  final file = File(_androidIdentityPropertiesPath);
+
+  file.parent.createSync(recursive: true);
+
+  file.writeAsStringSync(_androidIdentityPropertiesContent(identity));
+}
+
 String _iosIdentityConfigContent(AppIdentity identity) {
   return '''
 // Generated from ci/artifacts.env by tool/configure_app.dart.
@@ -388,6 +427,7 @@ void _updateIosIdentityConfig(AppIdentity identity) {
   final file = File(_iosIdentityConfigPath);
 
   file.parent.createSync(recursive: true);
+
   file.writeAsStringSync(_iosIdentityConfigContent(identity));
 }
 
@@ -403,6 +443,7 @@ void _ensureXcconfigInclude(File file, String includeName) {
   }
 
   final directive = '#include "$includeName"';
+
   final lines = file.readAsLinesSync();
 
   if (lines.contains(directive)) {
@@ -483,6 +524,97 @@ void _updateIosProjectBundleIdentifiers() {
   file.writeAsStringSync(content);
 }
 
+void _checkPubspec(AppIdentity identity, List<String> failures) {
+  final content = File(_pubspecPath).readAsStringSync();
+
+  if (!RegExp(
+    '^name:\\s*'
+    '${RegExp.escape(identity.dartPackageName)}'
+    '\\s*\$',
+    multiLine: true,
+  ).hasMatch(content)) {
+    failures.add(
+      'pubspec.yaml does not use '
+      'DART_PACKAGE_NAME=${identity.dartPackageName}',
+    );
+  }
+}
+
+void _checkAndroidManifest(List<String> failures) {
+  final file = File(_androidManifestPath);
+
+  if (!file.existsSync()) {
+    failures.add('Missing $_androidManifestPath');
+    return;
+  }
+
+  final content = file.readAsStringSync();
+
+  if (!content.contains(r'android:label="${appName}"')) {
+    failures.add(
+      'Android display name is not driven by '
+      'the appName manifest placeholder',
+    );
+  }
+}
+
+void _checkAndroidMainActivity(AppIdentity identity, List<String> failures) {
+  final packagePath = identity.androidNamespace.replaceAll('.', '/');
+
+  final file = File(
+    '$_androidKotlinRoot/'
+    '$packagePath/'
+    'MainActivity.kt',
+  );
+
+  if (!file.existsSync()) {
+    failures.add(
+      'MainActivity.kt is not located under '
+      '${identity.androidNamespace}',
+    );
+    return;
+  }
+
+  final content = file.readAsStringSync();
+
+  if (!RegExp(
+    '^package\\s+'
+    '${RegExp.escape(identity.androidNamespace)}'
+    '\\s*\$',
+    multiLine: true,
+  ).hasMatch(content)) {
+    failures.add(
+      'MainActivity.kt package differs from '
+      'ANDROID_NAMESPACE=${identity.androidNamespace}',
+    );
+  }
+}
+
+void _checkAndroidIdentityProperties(
+  AppIdentity identity,
+  List<String> failures,
+) {
+  final file = File(_androidIdentityPropertiesPath);
+
+  if (!file.existsSync()) {
+    failures.add('Missing $_androidIdentityPropertiesPath');
+    return;
+  }
+
+  final actual = _normalizeLineEndings(file.readAsStringSync());
+
+  final expected = _normalizeLineEndings(
+    _androidIdentityPropertiesContent(identity),
+  );
+
+  if (actual != expected) {
+    failures.add(
+      '$_androidIdentityPropertiesPath '
+      'differs from ci/artifacts.env',
+    );
+  }
+}
+
 void _checkIosIdentityConfig(AppIdentity identity, List<String> failures) {
   final file = File(_iosIdentityConfigPath);
 
@@ -496,7 +628,10 @@ void _checkIosIdentityConfig(AppIdentity identity, List<String> failures) {
   final expected = _normalizeLineEndings(_iosIdentityConfigContent(identity));
 
   if (actual != expected) {
-    failures.add('$_iosIdentityConfigPath differs from ci/artifacts.env');
+    failures.add(
+      '$_iosIdentityConfigPath '
+      'differs from ci/artifacts.env',
+    );
   }
 }
 
@@ -510,7 +645,10 @@ void _checkIosConfigIncludes(List<String> failures) {
     }
 
     if (!file.readAsLinesSync().contains('#include "AppIdentity.xcconfig"')) {
-      failures.add('$path does not include AppIdentity.xcconfig');
+      failures.add(
+        '$path does not include '
+        'AppIdentity.xcconfig',
+      );
     }
   }
 }
@@ -575,11 +713,17 @@ void _checkIosProjectBundleIdentifiers(List<String> failures) {
       continue;
     }
 
-    failures.add('Unexpected iOS bundle identifier setting: $value');
+    failures.add(
+      'Unexpected iOS bundle identifier '
+      'setting: $value',
+    );
   }
 
   if (!hasApp) {
-    failures.add('Runner does not use APP_BUNDLE_IDENTIFIER');
+    failures.add(
+      'Runner does not use '
+      'APP_BUNDLE_IDENTIFIER',
+    );
   }
 
   if (!hasTests) {
@@ -627,75 +771,6 @@ bool _samePath(String first, String second) {
   return normalize(first) == normalize(second);
 }
 
-void _checkPubspec(AppIdentity identity, List<String> failures) {
-  final content = File(_pubspecPath).readAsStringSync();
-
-  if (!RegExp(
-    '^name:\\s*${RegExp.escape(identity.dartPackageName)}\\s*\$',
-    multiLine: true,
-  ).hasMatch(content)) {
-    failures.add(
-      'pubspec.yaml does not use '
-      'DART_PACKAGE_NAME=${identity.dartPackageName}',
-    );
-  }
-}
-
-void _checkAndroidBuild(AppIdentity identity, List<String> failures) {
-  final content = File(_androidBuildPath).readAsStringSync();
-
-  if (!content.contains('namespace = "${identity.androidNamespace}"')) {
-    failures.add(
-      'Android namespace differs from '
-      'ANDROID_NAMESPACE=${identity.androidNamespace}',
-    );
-  }
-
-  if (!content.contains('applicationId = "${identity.androidApplicationId}"')) {
-    failures.add(
-      'Android applicationId differs from '
-      'ANDROID_APPLICATION_ID=${identity.androidApplicationId}',
-    );
-  }
-}
-
-void _checkAndroidManifest(AppIdentity identity, List<String> failures) {
-  final content = File(_androidManifestPath).readAsStringSync();
-
-  if (!content.contains('android:label="${identity.displayName}"')) {
-    failures.add(
-      'Android display name differs from '
-      'APP_DISPLAY_NAME=${identity.displayName}',
-    );
-  }
-}
-
-void _checkAndroidMainActivity(AppIdentity identity, List<String> failures) {
-  final packagePath = identity.androidNamespace.replaceAll('.', '/');
-
-  final file = File('$_androidKotlinRoot/$packagePath/MainActivity.kt');
-
-  if (!file.existsSync()) {
-    failures.add(
-      'MainActivity.kt is not located under '
-      '${identity.androidNamespace}',
-    );
-    return;
-  }
-
-  final content = file.readAsStringSync();
-
-  if (!RegExp(
-    '^package\\s+${RegExp.escape(identity.androidNamespace)}\\s*\$',
-    multiLine: true,
-  ).hasMatch(content)) {
-    failures.add(
-      'MainActivity.kt package differs from '
-      'ANDROID_NAMESPACE=${identity.androidNamespace}',
-    );
-  }
-}
-
 final class AppIdentity {
   const AppIdentity({
     required this.displayName,
@@ -705,6 +780,9 @@ final class AppIdentity {
     required this.appScheme,
     required this.iosBundleIdentifier,
     required this.iosBundleName,
+    required this.stagingNameSuffix,
+    required this.stagingIdSuffix,
+    required this.stagingSchemeSuffix,
   });
 
   final String displayName;
@@ -714,4 +792,13 @@ final class AppIdentity {
   final String appScheme;
   final String iosBundleIdentifier;
   final String iosBundleName;
+  final String stagingNameSuffix;
+  final String stagingIdSuffix;
+  final String stagingSchemeSuffix;
+
+  String get stagingDisplayName => '$displayName$stagingNameSuffix';
+
+  String get stagingApplicationId => '$androidApplicationId$stagingIdSuffix';
+
+  String get stagingAppScheme => '$appScheme$stagingSchemeSuffix';
 }
