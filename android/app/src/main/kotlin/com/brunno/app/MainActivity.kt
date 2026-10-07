@@ -1,4 +1,4 @@
-package com.brunno.app_flutter
+package com.brunno.app
 
 import io.flutter.embedding.android.FlutterActivity
 

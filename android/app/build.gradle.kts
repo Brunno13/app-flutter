@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.brunno.app_flutter"
+    namespace = "com.brunno.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,8 +15,9 @@ android {
     }
 
     defaultConfig {
+        manifestPlaceholders["appScheme"] = "app-flutter"
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.brunno.app_flutter"
+        applicationId = "com.brunno.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
