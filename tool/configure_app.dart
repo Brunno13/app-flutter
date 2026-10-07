@@ -27,7 +27,7 @@ void main(List<String> args) {
     androidApplicationId: _required(config, 'ANDROID_APPLICATION_ID'),
     appScheme: _required(config, 'APP_SCHEME'),
     iosBundleIdentifier: _required(config, 'IOS_BUNDLE_IDENTIFIER'),
-    iosProductName: _required(config, 'IOS_PRODUCT_NAME'),
+    iosBundleName: _required(config, 'IOS_BUNDLE_NAME'),
   );
 
   _validateIdentity(identity);
@@ -44,6 +44,7 @@ void _apply(AppIdentity identity) {
 
   _updatePubspec(identity);
   _updateAndroidBuild(identity);
+  _updateAndroidAppScheme(identity);
   _updateAndroidManifest(identity);
   _updateAndroidMainActivity(identity);
   _updateIosIdentityConfig(identity);
@@ -68,6 +69,9 @@ void _check(AppIdentity identity) {
   _checkIosConfigIncludes(failures);
   _checkIosInfoPlist(failures);
   _checkIosProjectBundleIdentifiers(failures);
+  _checkAndroidAppScheme(identity, failures);
+  _checkAndroidDeepLinkManifest(failures);
+  _checkIosAppScheme(failures);
 
   if (failures.isNotEmpty) {
     for (final failure in failures) {
@@ -83,6 +87,53 @@ void _check(AppIdentity identity) {
 
   stdout.writeln();
   stdout.writeln('APP_IDENTITY_CHECK=PASS');
+}
+
+void _checkAndroidAppScheme(AppIdentity identity, List<String> failures) {
+  final content = File(_androidBuildPath).readAsStringSync();
+
+  final expected =
+      'manifestPlaceholders["appScheme"] = "${identity.appScheme}"';
+
+  if (!content.contains(expected)) {
+    failures.add(
+      'Android app scheme differs from '
+      'APP_SCHEME=${identity.appScheme}',
+    );
+  }
+}
+
+void _checkAndroidDeepLinkManifest(List<String> failures) {
+  final content = File(_androidManifestPath).readAsStringSync();
+
+  final requiredFragments = [
+    'android.intent.action.VIEW',
+    'android.intent.category.DEFAULT',
+    'android.intent.category.BROWSABLE',
+    r'android:scheme="${appScheme}"',
+  ];
+
+  for (final fragment in requiredFragments) {
+    if (!content.contains(fragment)) {
+      failures.add('Android deep-link manifest is missing: $fragment');
+    }
+  }
+}
+
+void _checkIosAppScheme(List<String> failures) {
+  final content = File(_iosInfoPlistPath).readAsStringSync();
+
+  final requiredFragments = [
+    '<key>CFBundleURLTypes</key>',
+    '<key>CFBundleURLSchemes</key>',
+    r'<string>$(APP_URL_SCHEME)</string>',
+  ];
+
+  for (final fragment in requiredFragments) {
+    if (!content.contains(fragment)) {
+      failures.add('iOS URL scheme configuration is missing: $fragment');
+    }
+  }
 }
 
 Map<String, String> _readEnvFile(File file) {
@@ -232,6 +283,30 @@ void _updateAndroidBuild(AppIdentity identity) {
   file.writeAsStringSync(content);
 }
 
+void _updateAndroidAppScheme(AppIdentity identity) {
+  final file = File(_androidBuildPath);
+  var content = file.readAsStringSync();
+
+  final expected =
+      'manifestPlaceholders["appScheme"] = "${identity.appScheme}"';
+
+  final existing = RegExp(r'manifestPlaceholders\["appScheme"\]\s*=\s*"[^"]*"');
+
+  if (existing.hasMatch(content)) {
+    content = content.replaceFirst(existing, expected);
+  } else {
+    const anchor = 'defaultConfig {';
+
+    if (!content.contains(anchor)) {
+      throw StateError('Unable to locate defaultConfig in $_androidBuildPath');
+    }
+
+    content = content.replaceFirst(anchor, '$anchor\n        $expected');
+  }
+
+  file.writeAsStringSync(content);
+}
+
 void _updateAndroidManifest(AppIdentity identity) {
   final file = File(_androidManifestPath);
   var content = file.readAsStringSync();
@@ -304,7 +379,7 @@ String _iosIdentityConfigContent(AppIdentity identity) {
 // Do not edit manually.
 APP_DISPLAY_NAME = ${identity.displayName}
 APP_BUNDLE_IDENTIFIER = ${identity.iosBundleIdentifier}
-APP_PRODUCT_NAME = ${identity.iosProductName}
+APP_BUNDLE_NAME = ${identity.iosBundleName}
 APP_URL_SCHEME = ${identity.appScheme}
 ''';
 }
@@ -354,11 +429,7 @@ void _updateIosInfoPlist() {
     r'$(APP_DISPLAY_NAME)',
   );
 
-  content = _replacePlistString(
-    content,
-    'CFBundleName',
-    r'$(APP_PRODUCT_NAME)',
-  );
+  content = _replacePlistString(content, 'CFBundleName', r'$(APP_BUNDLE_NAME)');
 
   file.writeAsStringSync(content);
 }
@@ -461,10 +532,10 @@ void _checkIosInfoPlist(List<String> failures) {
     );
   }
 
-  if (!content.contains(r'<string>$(APP_PRODUCT_NAME)</string>')) {
+  if (!content.contains(r'<string>$(APP_BUNDLE_NAME)</string>')) {
     failures.add(
       'iOS CFBundleName is not driven by '
-      'IOS_PRODUCT_NAME',
+      'IOS_BUNDLE_NAME',
     );
   }
 }
@@ -633,7 +704,7 @@ final class AppIdentity {
     required this.androidApplicationId,
     required this.appScheme,
     required this.iosBundleIdentifier,
-    required this.iosProductName,
+    required this.iosBundleName,
   });
 
   final String displayName;
@@ -642,5 +713,5 @@ final class AppIdentity {
   final String androidApplicationId;
   final String appScheme;
   final String iosBundleIdentifier;
-  final String iosProductName;
+  final String iosBundleName;
 }
