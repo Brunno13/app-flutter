@@ -1,0 +1,6 @@
+// Generated from ci/artifacts.env by tool/configure_app.dart.
+// Do not edit manually.
+APP_DISPLAY_NAME = App Flutter
+APP_BUNDLE_IDENTIFIER = com.brunno.app
+APP_PRODUCT_NAME = AppFlutter
+APP_URL_SCHEME = app-flutter

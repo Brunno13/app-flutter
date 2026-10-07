@@ -1,0 +1,32 @@
+# Normalize text files across Windows/macOS/Linux.
+* text=auto
+
+# Source and configuration files use LF.
+*.dart      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.env       text eol=lf
+*.md        text eol=lf
+*.xml       text eol=lf
+*.plist     text eol=lf
+*.xcconfig  text eol=lf
+*.pbxproj   text eol=lf
+*.xcscheme  text eol=lf
+*.gradle    text eol=lf
+*.kts       text eol=lf
+*.kt        text eol=lf
+*.properties text eol=lf
+*.sh        text eol=lf
+
+# Windows command files keep CRLF.
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binary assets.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary

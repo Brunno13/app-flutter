@@ -4,6 +4,11 @@ const _configPath = 'ci/artifacts.env';
 const _androidBuildPath = 'android/app/build.gradle.kts';
 const _androidManifestPath = 'android/app/src/main/AndroidManifest.xml';
 const _androidKotlinRoot = 'android/app/src/main/kotlin';
+const _iosIdentityConfigPath = 'ios/Flutter/AppIdentity.xcconfig';
+const _iosDebugConfigPath = 'ios/Flutter/Debug.xcconfig';
+const _iosReleaseConfigPath = 'ios/Flutter/Release.xcconfig';
+const _iosInfoPlistPath = 'ios/Runner/Info.plist';
+const _iosProjectPath = 'ios/Runner.xcodeproj/project.pbxproj';
 const _pubspecPath = 'pubspec.yaml';
 
 void main(List<String> args) {
@@ -21,6 +26,8 @@ void main(List<String> args) {
     androidNamespace: _required(config, 'ANDROID_NAMESPACE'),
     androidApplicationId: _required(config, 'ANDROID_APPLICATION_ID'),
     appScheme: _required(config, 'APP_SCHEME'),
+    iosBundleIdentifier: _required(config, 'IOS_BUNDLE_IDENTIFIER'),
+    iosProductName: _required(config, 'IOS_PRODUCT_NAME'),
   );
 
   _validateIdentity(identity);
@@ -39,6 +46,10 @@ void _apply(AppIdentity identity) {
   _updateAndroidBuild(identity);
   _updateAndroidManifest(identity);
   _updateAndroidMainActivity(identity);
+  _updateIosIdentityConfig(identity);
+  _updateIosConfigIncludes();
+  _updateIosInfoPlist();
+  _updateIosProjectBundleIdentifiers();
 
   stdout.writeln();
   stdout.writeln('APP_IDENTITY_APPLY=PASS');
@@ -53,6 +64,10 @@ void _check(AppIdentity identity) {
   _checkAndroidBuild(identity, failures);
   _checkAndroidManifest(identity, failures);
   _checkAndroidMainActivity(identity, failures);
+  _checkIosIdentityConfig(identity, failures);
+  _checkIosConfigIncludes(failures);
+  _checkIosInfoPlist(failures);
+  _checkIosProjectBundleIdentifiers(failures);
 
   if (failures.isNotEmpty) {
     for (final failure in failures) {
@@ -132,6 +147,15 @@ void _validateIdentity(AppIdentity identity) {
     throw StateError(
       'Invalid ANDROID_APPLICATION_ID: '
       '${identity.androidApplicationId}',
+    );
+  }
+
+  final iosBundleIdPattern = RegExp(r'^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$');
+
+  if (!iosBundleIdPattern.hasMatch(identity.iosBundleIdentifier)) {
+    throw StateError(
+      'Invalid IOS_BUNDLE_IDENTIFIER: '
+      '${identity.iosBundleIdentifier}',
     );
   }
 
@@ -235,11 +259,13 @@ void _updateAndroidMainActivity(AppIdentity identity) {
 
   if (candidates.length != 1) {
     throw StateError(
-      'Expected exactly one MainActivity.kt, found ${candidates.length}',
+      'Expected exactly one MainActivity.kt, '
+      'found ${candidates.length}',
     );
   }
 
   final source = candidates.single;
+
   var content = source.readAsStringSync();
 
   content = content.replaceFirst(
@@ -247,25 +273,260 @@ void _updateAndroidMainActivity(AppIdentity identity) {
     'package ${identity.androidNamespace}',
   );
 
-  final relativePackagePath = identity.androidNamespace.replaceAll('.', '/');
+  final relativePackagePath = identity.androidNamespace
+      .split('.')
+      .join(Platform.pathSeparator);
 
   final target = File(
-    '$_androidKotlinRoot/$relativePackagePath/MainActivity.kt',
+    [
+      _androidKotlinRoot,
+      relativePackagePath,
+      'MainActivity.kt',
+    ].join(Platform.pathSeparator),
   );
+
+  if (_samePath(source.path, target.path)) {
+    source.writeAsStringSync(content);
+    return;
+  }
 
   target.parent.createSync(recursive: true);
   target.writeAsStringSync(content);
 
-  if (source.absolute.path != target.absolute.path) {
-    source.deleteSync();
-    _removeEmptyParents(source.parent, kotlinRoot);
+  source.deleteSync();
+
+  _removeEmptyParents(source.parent, kotlinRoot);
+}
+
+String _iosIdentityConfigContent(AppIdentity identity) {
+  return '''
+// Generated from ci/artifacts.env by tool/configure_app.dart.
+// Do not edit manually.
+APP_DISPLAY_NAME = ${identity.displayName}
+APP_BUNDLE_IDENTIFIER = ${identity.iosBundleIdentifier}
+APP_PRODUCT_NAME = ${identity.iosProductName}
+APP_URL_SCHEME = ${identity.appScheme}
+''';
+}
+
+void _updateIosIdentityConfig(AppIdentity identity) {
+  final file = File(_iosIdentityConfigPath);
+
+  file.parent.createSync(recursive: true);
+  file.writeAsStringSync(_iosIdentityConfigContent(identity));
+}
+
+void _updateIosConfigIncludes() {
+  _ensureXcconfigInclude(File(_iosDebugConfigPath), 'AppIdentity.xcconfig');
+
+  _ensureXcconfigInclude(File(_iosReleaseConfigPath), 'AppIdentity.xcconfig');
+}
+
+void _ensureXcconfigInclude(File file, String includeName) {
+  if (!file.existsSync()) {
+    throw StateError('Missing ${file.path}');
   }
+
+  final directive = '#include "$includeName"';
+  final lines = file.readAsLinesSync();
+
+  if (lines.contains(directive)) {
+    return;
+  }
+
+  lines.insert(0, directive);
+
+  file.writeAsStringSync('${lines.join('\n')}\n');
+}
+
+void _updateIosInfoPlist() {
+  final file = File(_iosInfoPlistPath);
+
+  if (!file.existsSync()) {
+    throw StateError('Missing $_iosInfoPlistPath');
+  }
+
+  var content = file.readAsStringSync();
+
+  content = _replacePlistString(
+    content,
+    'CFBundleDisplayName',
+    r'$(APP_DISPLAY_NAME)',
+  );
+
+  content = _replacePlistString(
+    content,
+    'CFBundleName',
+    r'$(APP_PRODUCT_NAME)',
+  );
+
+  file.writeAsStringSync(content);
+}
+
+String _replacePlistString(String content, String key, String value) {
+  final pattern = RegExp(
+    '<key>${RegExp.escape(key)}</key>\\s*'
+    '<string>[^<]*</string>',
+  );
+
+  if (!pattern.hasMatch(content)) {
+    throw StateError('Unable to locate $key in $_iosInfoPlistPath');
+  }
+
+  return content.replaceFirstMapped(
+    pattern,
+    (_) => '<key>$key</key>\n\t<string>$value</string>',
+  );
+}
+
+void _updateIosProjectBundleIdentifiers() {
+  final file = File(_iosProjectPath);
+
+  if (!file.existsSync()) {
+    throw StateError('Missing $_iosProjectPath');
+  }
+
+  var content = file.readAsStringSync();
+
+  final pattern = RegExp(r'PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);');
+
+  final matches = pattern.allMatches(content).toList();
+
+  if (matches.isEmpty) {
+    throw StateError(
+      'No PRODUCT_BUNDLE_IDENTIFIER entries found '
+      'in $_iosProjectPath',
+    );
+  }
+
+  content = content.replaceAllMapped(pattern, (match) {
+    final current = match.group(1)!;
+
+    if (current.contains('RunnerTests')) {
+      return r'PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).RunnerTests";';
+    }
+
+    return r'PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";';
+  });
+
+  file.writeAsStringSync(content);
+}
+
+void _checkIosIdentityConfig(AppIdentity identity, List<String> failures) {
+  final file = File(_iosIdentityConfigPath);
+
+  if (!file.existsSync()) {
+    failures.add('Missing $_iosIdentityConfigPath');
+    return;
+  }
+
+  final actual = _normalizeLineEndings(file.readAsStringSync());
+
+  final expected = _normalizeLineEndings(_iosIdentityConfigContent(identity));
+
+  if (actual != expected) {
+    failures.add('$_iosIdentityConfigPath differs from ci/artifacts.env');
+  }
+}
+
+void _checkIosConfigIncludes(List<String> failures) {
+  for (final path in [_iosDebugConfigPath, _iosReleaseConfigPath]) {
+    final file = File(path);
+
+    if (!file.existsSync()) {
+      failures.add('Missing $path');
+      continue;
+    }
+
+    if (!file.readAsLinesSync().contains('#include "AppIdentity.xcconfig"')) {
+      failures.add('$path does not include AppIdentity.xcconfig');
+    }
+  }
+}
+
+void _checkIosInfoPlist(List<String> failures) {
+  final file = File(_iosInfoPlistPath);
+
+  if (!file.existsSync()) {
+    failures.add('Missing $_iosInfoPlistPath');
+    return;
+  }
+
+  final content = file.readAsStringSync();
+
+  if (!content.contains(r'<string>$(APP_DISPLAY_NAME)</string>')) {
+    failures.add(
+      'iOS CFBundleDisplayName is not driven by '
+      'APP_DISPLAY_NAME',
+    );
+  }
+
+  if (!content.contains(r'<string>$(APP_PRODUCT_NAME)</string>')) {
+    failures.add(
+      'iOS CFBundleName is not driven by '
+      'IOS_PRODUCT_NAME',
+    );
+  }
+}
+
+void _checkIosProjectBundleIdentifiers(List<String> failures) {
+  final file = File(_iosProjectPath);
+
+  if (!file.existsSync()) {
+    failures.add('Missing $_iosProjectPath');
+    return;
+  }
+
+  final content = file.readAsStringSync();
+
+  final pattern = RegExp(r'PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);');
+
+  final matches = pattern.allMatches(content).toList();
+
+  if (matches.isEmpty) {
+    failures.add('No PRODUCT_BUNDLE_IDENTIFIER entries found');
+    return;
+  }
+
+  var hasApp = false;
+  var hasTests = false;
+
+  for (final match in matches) {
+    final value = match.group(1)!.trim();
+
+    if (value == r'"$(APP_BUNDLE_IDENTIFIER)"') {
+      hasApp = true;
+      continue;
+    }
+
+    if (value == r'"$(APP_BUNDLE_IDENTIFIER).RunnerTests"') {
+      hasTests = true;
+      continue;
+    }
+
+    failures.add('Unexpected iOS bundle identifier setting: $value');
+  }
+
+  if (!hasApp) {
+    failures.add('Runner does not use APP_BUNDLE_IDENTIFIER');
+  }
+
+  if (!hasTests) {
+    failures.add(
+      'RunnerTests does not derive from '
+      'APP_BUNDLE_IDENTIFIER',
+    );
+  }
+}
+
+String _normalizeLineEndings(String value) {
+  return value.replaceAll('\r\n', '\n');
 }
 
 void _removeEmptyParents(Directory directory, Directory stopAt) {
   var current = directory;
 
-  while (current.absolute.path != stopAt.absolute.path) {
+  while (!_samePath(current.path, stopAt.path)) {
     if (!current.existsSync()) {
       break;
     }
@@ -275,9 +536,24 @@ void _removeEmptyParents(Directory directory, Directory stopAt) {
     }
 
     final parent = current.parent;
+
     current.deleteSync();
     current = parent;
   }
+}
+
+bool _samePath(String first, String second) {
+  String normalize(String value) {
+    var path = File(value).absolute.path.replaceAll('\\', '/');
+
+    if (Platform.isWindows) {
+      path = path.toLowerCase();
+    }
+
+    return path;
+  }
+
+  return normalize(first) == normalize(second);
 }
 
 void _checkPubspec(AppIdentity identity, List<String> failures) {
@@ -356,6 +632,8 @@ final class AppIdentity {
     required this.androidNamespace,
     required this.androidApplicationId,
     required this.appScheme,
+    required this.iosBundleIdentifier,
+    required this.iosProductName,
   });
 
   final String displayName;
@@ -363,4 +641,6 @@ final class AppIdentity {
   final String androidNamespace;
   final String androidApplicationId;
   final String appScheme;
+  final String iosBundleIdentifier;
+  final String iosProductName;
 }
