@@ -10,6 +10,10 @@ const _iosDebugConfigPath = 'ios/Flutter/Debug.xcconfig';
 const _iosReleaseConfigPath = 'ios/Flutter/Release.xcconfig';
 const _iosInfoPlistPath = 'ios/Runner/Info.plist';
 const _iosProjectPath = 'ios/Runner.xcodeproj/project.pbxproj';
+const _iosStagingIdentityConfigPath =
+    'ios/Flutter/AppIdentity-staging.xcconfig';
+const _iosDebugStagingConfigPath = 'ios/Flutter/Debug-staging.xcconfig';
+const _iosReleaseStagingConfigPath = 'ios/Flutter/Release-staging.xcconfig';
 const _pubspecPath = 'pubspec.yaml';
 
 void main(List<String> args) {
@@ -50,6 +54,7 @@ void _apply(AppIdentity identity) {
   _updateAndroidIdentityProperties(identity);
   _updateAndroidManifest();
   _updateAndroidMainActivity(identity);
+  _updateIosStagingIdentityConfig(identity);
   _updateIosIdentityConfig(identity);
   _updateIosConfigIncludes();
   _updateIosInfoPlist();
@@ -73,6 +78,7 @@ void _check(AppIdentity identity) {
   _checkAndroidFlavors(failures);
 
   _checkIosIdentityConfig(identity, failures);
+  _checkIosStagingIdentityConfig(identity, failures);
   _checkIosConfigIncludes(failures);
   _checkIosInfoPlist(failures);
   _checkIosProjectBundleIdentifiers(failures);
@@ -251,6 +257,14 @@ void _validateIdentity(AppIdentity identity) {
     );
   }
 
+  if (!iosBundleIdPattern.hasMatch(identity.stagingIosBundleIdentifier)) {
+    throw StateError(
+      'Invalid staging iOS bundle identifier derived from '
+      'IOS_BUNDLE_IDENTIFIER + APP_STAGING_ID_SUFFIX: '
+      '${identity.stagingIosBundleIdentifier}',
+    );
+  }
+
   if (!schemePattern.hasMatch(identity.appScheme)) {
     throw StateError('Invalid APP_SCHEME: ${identity.appScheme}');
   }
@@ -423,6 +437,17 @@ APP_URL_SCHEME = ${identity.appScheme}
 ''';
 }
 
+String _iosStagingIdentityConfigContent(AppIdentity identity) {
+  return '''
+// Generated from ci/artifacts.env by tool/configure_app.dart.
+// Do not edit manually.
+APP_DISPLAY_NAME = ${identity.stagingDisplayName}
+APP_BUNDLE_IDENTIFIER = ${identity.stagingIosBundleIdentifier}
+APP_BUNDLE_NAME = ${identity.iosBundleName}
+APP_URL_SCHEME = ${identity.stagingAppScheme}
+''';
+}
+
 void _updateIosIdentityConfig(AppIdentity identity) {
   final file = File(_iosIdentityConfigPath);
 
@@ -431,10 +456,42 @@ void _updateIosIdentityConfig(AppIdentity identity) {
   file.writeAsStringSync(_iosIdentityConfigContent(identity));
 }
 
+void _updateIosStagingIdentityConfig(AppIdentity identity) {
+  final file = File(_iosStagingIdentityConfigPath);
+
+  file.parent.createSync(recursive: true);
+
+  file.writeAsStringSync(_iosStagingIdentityConfigContent(identity));
+}
+
 void _updateIosConfigIncludes() {
+  _ensureXcconfigInclude(File(_iosDebugConfigPath), 'Generated.xcconfig');
+
   _ensureXcconfigInclude(File(_iosDebugConfigPath), 'AppIdentity.xcconfig');
 
+  _ensureXcconfigInclude(File(_iosReleaseConfigPath), 'Generated.xcconfig');
+
   _ensureXcconfigInclude(File(_iosReleaseConfigPath), 'AppIdentity.xcconfig');
+
+  _ensureXcconfigInclude(
+    File(_iosDebugStagingConfigPath),
+    'Generated.xcconfig',
+  );
+
+  _ensureXcconfigInclude(
+    File(_iosDebugStagingConfigPath),
+    'AppIdentity-staging.xcconfig',
+  );
+
+  _ensureXcconfigInclude(
+    File(_iosReleaseStagingConfigPath),
+    'Generated.xcconfig',
+  );
+
+  _ensureXcconfigInclude(
+    File(_iosReleaseStagingConfigPath),
+    'AppIdentity-staging.xcconfig',
+  );
 }
 
 void _ensureXcconfigInclude(File file, String includeName) {
@@ -635,20 +692,68 @@ void _checkIosIdentityConfig(AppIdentity identity, List<String> failures) {
   }
 }
 
+void _checkIosStagingIdentityConfig(
+  AppIdentity identity,
+  List<String> failures,
+) {
+  final file = File(_iosStagingIdentityConfigPath);
+
+  if (!file.existsSync()) {
+    failures.add('Missing $_iosStagingIdentityConfigPath');
+    return;
+  }
+
+  final actual = _normalizeLineEndings(file.readAsStringSync());
+
+  final expected = _normalizeLineEndings(
+    _iosStagingIdentityConfigContent(identity),
+  );
+
+  if (actual != expected) {
+    failures.add(
+      '$_iosStagingIdentityConfigPath '
+      'differs from ci/artifacts.env',
+    );
+  }
+}
+
 void _checkIosConfigIncludes(List<String> failures) {
-  for (final path in [_iosDebugConfigPath, _iosReleaseConfigPath]) {
-    final file = File(path);
+  final expectedIncludes = <String, List<String>>{
+    _iosDebugConfigPath: [
+      '#include "AppIdentity.xcconfig"',
+      '#include "Generated.xcconfig"',
+    ],
+    _iosReleaseConfigPath: [
+      '#include "AppIdentity.xcconfig"',
+      '#include "Generated.xcconfig"',
+    ],
+    _iosDebugStagingConfigPath: [
+      '#include "AppIdentity-staging.xcconfig"',
+      '#include "Generated.xcconfig"',
+    ],
+    _iosReleaseStagingConfigPath: [
+      '#include "AppIdentity-staging.xcconfig"',
+      '#include "Generated.xcconfig"',
+    ],
+  };
+
+  for (final entry in expectedIncludes.entries) {
+    final file = File(entry.key);
 
     if (!file.existsSync()) {
-      failures.add('Missing $path');
+      failures.add('Missing ${entry.key}');
       continue;
     }
 
-    if (!file.readAsLinesSync().contains('#include "AppIdentity.xcconfig"')) {
-      failures.add(
-        '$path does not include '
-        'AppIdentity.xcconfig',
-      );
+    final lines = file.readAsLinesSync();
+
+    for (final expectedInclude in entry.value) {
+      if (!lines.contains(expectedInclude)) {
+        failures.add(
+          '${entry.key} does not include '
+          '$expectedInclude',
+        );
+      }
     }
   }
 }
@@ -801,4 +906,7 @@ final class AppIdentity {
   String get stagingApplicationId => '$androidApplicationId$stagingIdSuffix';
 
   String get stagingAppScheme => '$appScheme$stagingSchemeSuffix';
+
+  String get stagingIosBundleIdentifier =>
+      '$iosBundleIdentifier$stagingIdSuffix';
 }
