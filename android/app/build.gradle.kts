@@ -1,11 +1,30 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val appIdentityProperties = Properties().apply {
+    val identityFile = file("AppIdentity.properties")
+
+    check(identityFile.exists()) {
+        "Missing ${identityFile.path}. Run: dart run tool/configure_app.dart --apply"
+    }
+
+    identityFile.reader(Charsets.UTF_8).use { reader ->
+        load(reader)
+    }
+}
+
+fun appIdentity(key: String): String =
+    checkNotNull(appIdentityProperties.getProperty(key)) {
+        "Missing app identity property: $key"
+    }
+
 android {
-    namespace = "com.brunno.app"
+    namespace = appIdentity("androidNamespace")
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,25 +34,45 @@ android {
     }
 
     defaultConfig {
-        manifestPlaceholders["appScheme"] = "app-flutter"
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.brunno.app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = appIdentity("androidApplicationId")
+
+        manifestPlaceholders["appName"] =
+            appIdentity("productionDisplayName")
+
+        manifestPlaceholders["appScheme"] =
+            appIdentity("productionAppScheme")
+
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
+
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "environment"
+
+    productFlavors {
+        create("production") {
+            dimension = "environment"
+        }
+
+        create("staging") {
+            dimension = "environment"
+
+            applicationId =
+                appIdentity("stagingApplicationId")
+
+            manifestPlaceholders["appName"] =
+                appIdentity("stagingDisplayName")
+
+            manifestPlaceholders["appScheme"] =
+                appIdentity("stagingAppScheme")
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // TODO: Add the production signing configuration.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -41,7 +80,8 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        jvmTarget =
+            org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
