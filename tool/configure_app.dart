@@ -15,6 +15,10 @@ const _iosStagingIdentityConfigPath =
 const _iosDebugStagingConfigPath = 'ios/Flutter/Debug-staging.xcconfig';
 const _iosReleaseStagingConfigPath = 'ios/Flutter/Release-staging.xcconfig';
 const _pubspecPath = 'pubspec.yaml';
+const _iosProductionSchemePath =
+    'ios/Runner.xcodeproj/xcshareddata/xcschemes/production.xcscheme';
+const _iosStagingSchemePath =
+    'ios/Runner.xcodeproj/xcshareddata/xcschemes/staging.xcscheme';
 
 void main(List<String> args) {
   if (args.length != 1 || !{'--apply', '--check'}.contains(args.first)) {
@@ -83,6 +87,9 @@ void _check(AppIdentity identity) {
   _checkIosInfoPlist(failures);
   _checkIosProjectBundleIdentifiers(failures);
   _checkIosAppScheme(failures);
+  _checkIosFlavorBuildConfigurations(failures);
+  _checkIosFlavorFileReferences(failures);
+  _checkIosFlavorSchemes(failures);
 
   if (failures.isNotEmpty) {
     for (final failure in failures) {
@@ -162,6 +169,166 @@ void _checkIosAppScheme(List<String> failures) {
     if (!content.contains(fragment)) {
       failures.add('iOS URL scheme configuration is missing: $fragment');
     }
+  }
+}
+
+void _checkIosFlavorBuildConfigurations(List<String> failures) {
+  final file = File(_iosProjectPath);
+
+  if (!file.existsSync()) {
+    failures.add('Missing $_iosProjectPath');
+    return;
+  }
+
+  final content = file.readAsStringSync();
+
+  final requiredConfigurations = [
+    'Debug-production',
+    'Profile-production',
+    'Release-production',
+    'Debug-staging',
+    'Profile-staging',
+    'Release-staging',
+  ];
+
+  for (final configuration in requiredConfigurations) {
+    if (!content.contains('name = "$configuration";')) {
+      failures.add(
+        'iOS flavor build configuration is missing: '
+        '$configuration',
+      );
+    }
+  }
+
+  final requiredBaseConfigs = [
+    '/* Debug-production */',
+    '/* Profile-production */',
+    '/* Release-production */',
+    '/* Debug-staging */',
+    '/* Profile-staging */',
+    '/* Release-staging */',
+    '/* Debug.xcconfig */',
+    '/* Release.xcconfig */',
+    '/* Debug-staging.xcconfig */',
+    '/* Release-staging.xcconfig */',
+  ];
+
+  for (final fragment in requiredBaseConfigs) {
+    if (!content.contains(fragment)) {
+      failures.add(
+        'iOS flavor project configuration is missing: '
+        '$fragment',
+      );
+    }
+  }
+
+  final releaseDefaults = RegExp(r'defaultConfigurationName = Release;')
+      .allMatches(content)
+      .length;
+
+  if (releaseDefaults != 3) {
+    failures.add(
+      'Expected 3 iOS default configuration lists '
+      'using Release, found $releaseDefaults',
+    );
+  }
+}
+
+void _checkIosFlavorFileReferences(List<String> failures) {
+  final content = File(_iosProjectPath).readAsStringSync();
+
+  final requiredPaths = [
+    r'path = "Flutter/AppIdentity-staging.xcconfig";',
+    r'path = "Flutter/Debug-staging.xcconfig";',
+    r'path = "Flutter/Release-staging.xcconfig";',
+  ];
+
+  for (final path in requiredPaths) {
+    if (!content.contains(path)) {
+      failures.add(
+        'iOS staging xcconfig file reference '
+        'is missing or invalid: $path',
+      );
+    }
+  }
+
+  final invalidPaths = [
+    r'path = "AppIdentity-staging.xcconfig";',
+    r'path = "Debug-staging.xcconfig";',
+    r'path = "Release-staging.xcconfig";',
+  ];
+
+  for (final path in invalidPaths) {
+    if (content.contains(path)) {
+      failures.add(
+        'iOS staging xcconfig incorrectly points '
+        'outside Flutter/: $path',
+      );
+    }
+  }
+}
+
+void _checkIosFlavorSchemes(List<String> failures) {
+  _checkIosFlavorScheme(
+    path: _iosProductionSchemePath,
+    flavor: 'production',
+    debugConfiguration: 'Debug-production',
+    profileConfiguration: 'Profile-production',
+    releaseConfiguration: 'Release-production',
+    failures: failures,
+  );
+
+  _checkIosFlavorScheme(
+    path: _iosStagingSchemePath,
+    flavor: 'staging',
+    debugConfiguration: 'Debug-staging',
+    profileConfiguration: 'Profile-staging',
+    releaseConfiguration: 'Release-staging',
+    failures: failures,
+  );
+}
+
+void _checkIosFlavorScheme({
+  required String path,
+  required String flavor,
+  required String debugConfiguration,
+  required String profileConfiguration,
+  required String releaseConfiguration,
+  required List<String> failures,
+}) {
+  final file = File(path);
+
+  if (!file.existsSync()) {
+    failures.add('Missing shared iOS $flavor scheme: $path');
+    return;
+  }
+
+  final content = file.readAsStringSync();
+
+  final expectedDebugCount = RegExp(
+    'buildConfiguration = '
+    '"${RegExp.escape(debugConfiguration)}"',
+  ).allMatches(content).length;
+
+  if (expectedDebugCount < 3) {
+    failures.add(
+      'iOS $flavor scheme does not consistently use '
+      '$debugConfiguration for Debug actions',
+    );
+  }
+
+  if (!content.contains('buildConfiguration = "$profileConfiguration"')) {
+    failures.add(
+      'iOS $flavor scheme does not use '
+      '$profileConfiguration for Profile',
+    );
+  }
+
+  if (!content.contains('buildConfiguration = "$releaseConfiguration"')) {
+    failures.add(
+      'iOS $flavor scheme does not use '
+      '$releaseConfiguration for Archive',
+    );
   }
 }
 
