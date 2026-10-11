@@ -1,30 +1,55 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:app_flutter/app/app.dart';
+import 'package:app_flutter/app/theme/theme_view_model.dart';
+import 'package:app_flutter/features/home/home.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:app_flutter/main.dart';
-
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('App renders the home feature', (tester) async {
+    final themeViewModel = ThemeViewModel();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(App(themeViewModel: themeViewModel));
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    expect(find.byType(MaterialApp), findsOneWidget);
+    expect(find.byType(HomeView), findsOneWidget);
+    expect(find.text('Foundation ready'), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsOneWidget);
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('Theme switch updates MaterialApp reactively', (tester) async {
+    final themeViewModel = ThemeViewModel();
+
+    await tester.pumpWidget(App(themeViewModel: themeViewModel));
+
+    expect(themeViewModel.themeMode, ThemeMode.light);
+
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.light,
+    );
+
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+
+    expect(themeViewModel.themeMode, ThemeMode.dark);
+
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
+
+    expect(find.text('Dark mode enabled'), findsOneWidget);
+
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+
+    expect(themeViewModel.themeMode, ThemeMode.light);
+
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.light,
+    );
+
+    expect(find.text('Light mode enabled'), findsOneWidget);
   });
 }
