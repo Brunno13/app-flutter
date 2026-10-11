@@ -52,7 +52,6 @@ class ArchitectureChecker {
       if (pathInLib == null) continue;
 
       final scope = pathInLib.split('/').first;
-      if (scope != 'features' && scope != 'shared') continue;
 
       final displayPath = 'lib/$pathInLib';
       final result = parseString(
@@ -73,7 +72,7 @@ class ArchitectureChecker {
         );
       }
 
-      void inspectUri(String? rawUri, int offset) {
+      void inspectUri(String? rawUri, int offset, {required bool isExport}) {
         if (rawUri == null) return;
         final uri = Uri.tryParse(rawUri);
         if (uri == null) return;
@@ -91,12 +90,43 @@ class ArchitectureChecker {
           );
         }
 
-        if (uri.scheme == 'package' &&
-            uri.pathSegments.isNotEmpty &&
-            uri.pathSegments.first == 'get_it') {
-          report('ARCH003', 'features/shared cannot import or export get_it');
-          return;
+        // Infrastructure rules apply to ALL handwritten lib/ files,
+        // including app/, shared/, features/ and lib/main.dart.
+        if (uri.scheme == 'package' && uri.pathSegments.isNotEmpty) {
+          final importedPackage = uri.pathSegments.first;
+
+          if (importedPackage == 'get_it') {
+            if (scope == 'features' || scope == 'shared') {
+              // Preserve the existing, more specific rule and its diagnostics.
+              report(
+                'ARCH003',
+                'features/shared cannot import or export get_it',
+              );
+            } else if (isExport || !_isCompositionRoot(pathInLib)) {
+              report(
+                'ARCH009',
+                'GetIt is restricted to imports in app/bootstrap/ and app/di/: '
+                    '$rawUri',
+              );
+            }
+            return;
+          }
+
+          if ((importedPackage == 'mobx' ||
+                  importedPackage == 'flutter_mobx') &&
+              !_isPresentationScope(pathInLib)) {
+            report(
+              'ARCH008',
+              'MobX is restricted to UI presentation and app-level theme: '
+                  '$rawUri',
+            );
+            return;
+          }
         }
+
+        // Existing import-boundary checks are limited to features/shared.
+        // app/ and lib/main.dart are evaluated for ARCH008/009 above only.
+        if (scope != 'features' && scope != 'shared') return;
 
         Uri? target;
         final isRelative = !uri.hasScheme && !uri.hasAuthority;
@@ -128,18 +158,75 @@ class ArchitectureChecker {
             (targetScope == 'app' || targetScope == 'features')) {
           report('ARCH002', 'shared cannot depend on $targetScope/: $rawUri');
         }
+        if (scope == 'features' && targetScope == 'features') {
+          final sourceSegments = pathInLib.split('/');
+          final targetSegments = targetInLib.split('/');
+          if (sourceSegments.length >= 3 && targetSegments.length >= 3) {
+            final sourceFeature = sourceSegments[1];
+            final targetFeature = targetSegments[1];
+            final publicApi = 'features/$targetFeature/$targetFeature.dart';
+
+            if (sourceFeature != targetFeature) {
+              if (targetInLib != publicApi) {
+                report(
+                  'ARCH005',
+                  'Cross-feature imports/exports must use the public API '
+                      '($publicApi): $rawUri',
+                );
+              }
+            } else if (sourceSegments.length >= 4 &&
+                targetSegments.length >= 4) {
+              // Check direct imports/exports between layers of one feature.
+              // ARCH005 diagnoses cross-feature internals without duplicates.
+              final sourceLayer = sourceSegments[2];
+              final targetLayer = targetSegments[2];
+
+              if (sourceLayer == 'domain' &&
+                  (targetLayer == 'data' || targetLayer == 'presentation')) {
+                report(
+                  'ARCH006',
+                  'Domain cannot depend on $targetLayer/ in its own feature: '
+                      '$rawUri',
+                );
+              } else if (sourceLayer == 'data' &&
+                  targetLayer == 'presentation') {
+                report(
+                  'ARCH007',
+                  'Data cannot depend on presentation/ in its own feature: '
+                      '$rawUri',
+                );
+              }
+            }
+          }
+        }
       }
 
       for (final directive in result.unit.directives) {
         if (directive is ImportDirective) {
-          inspectUri(directive.uri.stringValue, directive.uri.offset);
+          inspectUri(
+            directive.uri.stringValue,
+            directive.uri.offset,
+            isExport: false,
+          );
           for (final conditional in directive.configurations) {
-            inspectUri(conditional.uri.stringValue, conditional.uri.offset);
+            inspectUri(
+              conditional.uri.stringValue,
+              conditional.uri.offset,
+              isExport: false,
+            );
           }
         } else if (directive is ExportDirective) {
-          inspectUri(directive.uri.stringValue, directive.uri.offset);
+          inspectUri(
+            directive.uri.stringValue,
+            directive.uri.offset,
+            isExport: true,
+          );
           for (final conditional in directive.configurations) {
-            inspectUri(conditional.uri.stringValue, conditional.uri.offset);
+            inspectUri(
+              conditional.uri.stringValue,
+              conditional.uri.offset,
+              isExport: true,
+            );
           }
         }
       }
@@ -162,6 +249,26 @@ class ArchitectureChecker {
       return null;
     }
     return uri.path.substring(_libUri.path.length);
+  }
+
+  // Only the application composition root may directly import GetIt.
+  bool _isCompositionRoot(String pathInLib) =>
+      pathInLib.startsWith('app/bootstrap/') || pathInLib.startsWith('app/di/');
+
+  // Global theming belongs to app/, not to a feature. app.dart hosts the
+  // MaterialApp Observer; feature/shared presentation owns other observers.
+  bool _isPresentationScope(String pathInLib) {
+    if (pathInLib == 'app/app.dart' || pathInLib.startsWith('app/theme/')) {
+      return true;
+    }
+
+    final parts = pathInLib.split('/');
+    return (parts.length >= 4 &&
+            parts[0] == 'features' &&
+            parts[2] == 'presentation') ||
+        (parts.length >= 3 &&
+            parts[0] == 'shared' &&
+            parts[1] == 'presentation');
   }
 
   bool _isGenerated(String path) =>
