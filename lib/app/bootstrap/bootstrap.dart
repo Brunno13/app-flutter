@@ -1,13 +1,16 @@
+import 'package:app_flutter/app/app.dart';
 import 'package:app_flutter/app/di/dependency_injection.dart';
+import 'package:app_flutter/app/environment/app_environment.dart';
+import 'package:flutter/services.dart' show appFlavor;
 import 'package:flutter/widgets.dart';
 import 'package:get_it/get_it.dart';
-
-import '../app.dart';
 
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await configureDependencies(GetIt.instance);
+  final environment = AppEnvironment.fromFlavor(appFlavor);
+
+  await configureDependencies(GetIt.instance, environment: environment);
 
   runApp(const App());
 }

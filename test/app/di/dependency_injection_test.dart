@@ -1,16 +1,25 @@
 import 'package:app_flutter/app/di/dependency_injection.dart';
+import 'package:app_flutter/app/environment/app_environment.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 
 void main() {
-  test('initializes an isolated dependency container', () async {
-    final container = GetIt.asNewInstance();
+  for (final environment in AppEnvironment.values) {
+    test(
+      'registers $environment in an isolated dependency container',
+      () async {
+        final container = GetIt.asNewInstance();
 
-    addTearDown(() => container.reset());
+        addTearDown(() => container.reset());
 
-    expect(identical(container, GetIt.instance), isFalse);
+        expect(identical(container, GetIt.instance), isFalse);
 
-    await configureDependencies(container);
-    await container.allReady();
-  });
+        await configureDependencies(container, environment: environment);
+
+        expect(container<AppEnvironment>(), environment);
+
+        await container.allReady();
+      },
+    );
+  }
 }
