@@ -1,0 +1,25 @@
+# App-Flutter: quality-only, no Android/iOS signing, publishing, or secrets.
+when:
+  - event: pull_request
+    branch: main
+  - event: push
+    branch: main
+  - event: manual
+    evaluate: 'BUILD_IOS != "staging" && BUILD_IOS != "production"'
+
+labels:
+  platform: linux/amd64
+  role: build-linux
+
+depends_on:
+  - security-wake-x86
+
+steps:
+  - name: flutter-quality
+    image: app-flutter-ci:3.47.6-v1
+    pull: false
+    commands:
+      - |
+        set -eu
+        echo '===== APP-FLUTTER QUALITY / VM104 ====='
+        bash ./scripts/quality_flutter.sh

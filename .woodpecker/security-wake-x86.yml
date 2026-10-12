@@ -1,0 +1,31 @@
+# App-Flutter: wakes VM104 on the always-on ARM64 Woodpecker agent.
+# Must run before the Linux/amd64 quality workflow, including on pull requests.
+when:
+  - event: pull_request
+    branch: main
+  - event: push
+    branch: main
+  - event: manual
+    evaluate: 'BUILD_IOS != "staging" && BUILD_IOS != "production"'
+
+skip_clone: true
+
+workspace:
+  base: /tmp
+  path: woodpecker-flutter-wake-x86
+
+labels:
+  platform: linux/arm64
+  hostname: orangepi5
+
+steps:
+  - name: wake-docker-x86
+    image: curlimages/curl:8.22.0
+    commands:
+      - |
+        set -eu
+        echo '===== APP-FLUTTER WAKE VM104 ====='
+        response="$(curl -fsS --connect-timeout 5 --max-time 180 -X POST --data '' https://energy-manager.brunnoserver.duckdns.org/cgi-bin/ci-wake-docker-x86)"
+        printf '%s\n' "$response"
+        printf '%s\n' "$response" | grep -Eq '^RESULT=(trigger_complete|already_in_progress)$'
+        echo 'SECURITY_WAKE_X86=PASS'
