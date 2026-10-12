@@ -1,237 +1,188 @@
 # 📱 App-Flutter
 
-Reusable Flutter base project for Android and iOS, designed around **MVVM**, reactive state, feature isolation, offline-first persistence, security, automated testing, and self-hosted CI/CD.
-This repository is intentionally a **base app**: it is meant to be cloned or adapted into multiple real production applications. Product identity, package/bundle IDs, URL schemes, environment configuration, artifact naming, and CI secrets are kept explicit and centralized so a derived app can be rebranded without spreading product-specific values through business code.
-The project is a sibling of `app-react-native` and `app-kmp`: it keeps the feature boundaries and governance model proven in the React Native project while adopting the layered MVVM structure and constructor-driven dependencies used by the KMP project.
+Reusable Flutter base project for **Android and iOS**, designed for incremental adoption of **MVVM**, reactive UI, feature isolation, offline-first persistence, automated quality, and self-hosted CI/CD.
 
-> **Current foundation:** Flutter 3.47.6 / Dart 3.13.5, iOS 15+, and validated Android/iOS `production` and `staging` flavors. MVVM, ObjectBox, MobX, authentication, advanced quality gates, and application-specific CI/CD are planned, not yet implemented.
+This is a reusable **base app**, not a finished product. Product identity, native flavors, deep-link schemes, and artifact naming are centralized to keep future derived applications maintainable. The project follows the engineering conventions of [`app-kmp`](https://github.com/Brunno13/app-kmp) and [`app-react-native`](https://github.com/Brunno13/app-react-native) without copying their technology stacks.
+
+> **Validated foundation (October 2026):** Flutter **3.47.6** / Dart **3.13.5**; Android/iOS `production` and `staging` flavors; feature-first bootstrap; GetIt + Injectable; MobX light/dark theming; **ARCH000–ARCH009** architecture checks; **44 passing tests**; and mandatory Woodpecker quality checks for Gitea pull requests. **Not yet implemented:** ObjectBox, production networking/authentication, `go_router`, advanced security gates, E2E, and signed release pipelines.
+
 
 ---
+
 ## 🚀 Key Features
 
-- **Reusable App Foundation (implemented):** Non-sensitive product identity and native environments are derived from `ci/artifacts.env`, with repeatable `--apply` and drift-detecting `--check` commands.
-- **Native Flavors (validated):** Android product flavors and iOS shared schemes provide distinct production/staging app IDs, display names, and custom URL schemes, with side-by-side installation and deep-link testing on emulators/simulators.
-- **MVVM (planned):** Views focus on rendering and interaction while ViewModels own presentation state and commands.
-- **Reactive by Design (planned):** MobX drives ViewModel state, while ObjectBox reactive queries propagate local data changes through repositories to the UI.
-- **Feature-First Architecture (planned):** Business domains remain isolated and expose explicit public APIs.
-- **Layered Features (planned):** Features may contain Presentation, Domain, and Data layers without unnecessary ceremony.
-- **Offline-First Persistence (planned):** ObjectBox will be the primary local source of truth for persistent application data.
-- **Secure Credentials (planned):** Authentication tokens and secrets will stay outside ObjectBox and use native secure storage.
-- **Constructor Injection (planned):** GetIt and Injectable will compose the dependency graph; business code will receive dependencies through constructors.
-- **Automated Quality:** Dart format, static analysis, starter tests, identity validation, and native debug builds have been validated locally. Architecture rules, business coverage, security scans, Android Lint, and E2E remain future gates.
-- **Self-Hosted CI/CD (planned for this repository):** Linux/Android workloads will run on a self-hosted amd64 agent, while Xcode/iOS workloads remain on macOS.
+- **Reusable App Identity (implemented):** `ci/artifacts.env` is the canonical source for public product identifiers, names, schemes, and future artifact naming. `tool/configure_app.dart` applies and checks the supported Android/iOS configuration.
+- **Native Environments (validated):** Independent `production` and `staging` app identities, shared Xcode schemes, Android product flavors, side-by-side installation, and custom deep links on Android and iOS simulators.
+- **Application Foundation (implemented):** A single `lib/main.dart`, explicit bootstrap, runtime `AppEnvironment` and composition root with GetIt + Injectable.
+- **Reactive Theme (validated):** MobX-backed `ThemeViewModel` switches between light/dark `ThemeData` using `Observer` without restarting the app. The choice is currently in-memory only.
+- **Feature-First Boundaries (enforced):** A Dart Analyzer-based checker validates import/export boundaries, feature public APIs, Presentation/Domain/Data constraints, and permitted GetIt/MobX usage (`ARCH000–ARCH009`).
+- **Self-Hosted Quality Gate (validated):** PR checks run on a dedicated Flutter 3.47.6 Linux/amd64 image using the VM104 Woodpecker agent. Gitea requires a successful quality status to merge into `main`.
+- **Offline-First Direction (planned):** ObjectBox as local source of truth, reactive repository streams and mapping into pure Domain models.
+- **Secure Integration (planned):** Dio, authentication adapters, secure credential storage, biometrics, E2E and release workflows will be implemented only when validated independently.
 
 ---
-## 🗺️ Initial Roadmap
 
-### Foundation
+## 🗺️ Project Roadmap
 
-- [x] Bootstrap Flutter project and validate Flutter 3.47.6 / Dart 3.13.5 on Windows and macOS ARM64.
-- [x] Verify the iOS deployment target is 15.0.
-- [x] Validate Android APK and iOS `.app` debug builds.
-- [x] Implement and validate Android/iOS Staging and Production flavors, including default production selection.
-- [x] Centralize base-app identity and artifact configuration in `ci/artifacts.env`.
-- [x] Add `tool/configure_app.dart` for app identity application and validation, with idempotency and negative tests.
-- [x] Validate distinct app IDs, labels, URL schemes, side-by-side installation, and deep links on Android and iOS simulators/emulators.
-- [ ] Configure MVVM, feature boundaries, GetIt/Injectable, MobX, and go_router.
+### ✅ Foundation and Native Environments
 
-### Reactive Offline Foundation
+- [x] Bootstrap the Flutter 3.47.6 / Dart 3.13.5 app and validate development on Windows and macOS.
+- [x] Establish iOS 15.0+ deployment support and validate Android/iOS debug builds.
+- [x] Centralize the supported non-secret application identity in `ci/artifacts.env`.
+- [x] Implement and test `tool/configure_app.dart --apply` / `--check`, including negative drift tests.
+- [x] Validate `production` / `staging` Android and iOS flavors, default production selection, side-by-side installs and deep-link schemes.
+- [x] Replace the sample counter app with a feature-first bootstrap and Home feature.
+- [x] Introduce GetIt + Injectable, constructor-driven composition and strict runtime `AppEnvironment` selection.
+- [x] Introduce MobX with a working light/dark theme and widget tests on both platforms/flavors.
 
-- [ ] Configure ObjectBox and version `objectbox-model.json`.
-- [ ] Validate reactive `watch()` behavior with a real repository flow.
-- [ ] Add secure credential storage and biometrics.
-- [ ] Implement the first complete feature slice.
+### ✅ Testing, Governance and CI
 
-### Testing and Governance
+- [x] Implement parser-based `ARCH000–ARCH009` architecture boundaries with positive and negative tests.
+- [x] Validate **44 tests** on Windows, macOS and the Linux/amd64 CI container.
+- [x] Build the dedicated `app-flutter-ci:3.47.6-v1` quality image without Android SDK/NDK.
+- [x] Configure Woodpecker wake and quality workflows for PRs and pushes to `main`.
+- [x] Require the Gitea quality context `ci/woodpecker/pr/test` for merges into `main`.
+- [x] Validate the complete **PASS → FAIL → PASS** cycle using an intentional ARCH001 violation and its removal (PR #5).
 
-- [x] Validate existing Flutter starter test and static analysis locally.
-- [x] Validate the app identity gate with positive and negative checks, including iOS flavor project structure.
-- [ ] Add domain/unit, ViewModel, repository integration, and feature widget tests.
-- [ ] Create the `app_arch_lints` analyzer plugin.
-- [ ] Enforce feature/layer boundaries.
-- [ ] Measure business and authored coverage before defining thresholds.
+### 🔜 Reactive Offline Foundation
 
-### Security and Native Quality
+- [ ] Introduce ObjectBox and version its schema model once real persistent entities exist.
+- [ ] Prove repository-to-ObjectBox `watch()` streams with a complete feature slice.
+- [ ] Add Dio, `go_router`, secure credential storage, authentication and biometrics where needed.
+- [ ] Add persisted theme preference and optional system theme follow-up.
 
-- [ ] Gitleaks.
-- [ ] Opengrep.
-- [ ] Trivy.
-- [ ] jscpd diagnostic baseline.
-- [ ] Android Lint baseline and classification.
+### 🔜 Quality, Security and Distribution
 
-### CI/CD and E2E
-
-- [ ] Create a dedicated Flutter Android CI image for the self-hosted amd64 executor.
-- [ ] Reproduce local quality gates in Woodpecker CI.
-- [ ] Add Patrol E2E for Android and iOS.
-- [ ] Add Android/iOS signed production release flows.
-- [ ] Integrate Garage, Gitea Releases, GitHub mirror/releases, and Gotify into the Flutter release pipeline.
+- [ ] Add reproducible generated-code drift validation to CI.
+- [ ] Measure meaningful business coverage before setting thresholds.
+- [ ] Add Gitleaks, Opengrep, Trivy, optional jscpd diagnostics and Android Lint in separate validated gates.
+- [ ] Add Android build workflows and iOS manual/release workflows; do not treat the quality image as a release image.
+- [ ] Introduce Patrol E2E and signing/packaging only after the native build flows are stable.
+- [ ] Integrate Garage, Gitea Releases, GitHub mirror/release, and Gotify into authorized artifact/release pipelines.
 
 ### Future Evaluation
 
-- [ ] Shorebird OTA after the traditional release pipeline is stable.
-- [ ] Generic offline mutation/outbox support only when a real feature requires offline writes and synchronization.
+- [ ] Evaluate Shorebird OTA after standard release validation.
+- [ ] Introduce offline mutation/outbox only when a feature requires it.
 
 ---
+
 ## 🛠️ Tech Stack
 
-The framework/toolchain and native flavor support are already validated. The remaining architecture, state-management, persistence, security, and delivery entries describe the **selected or planned stack**, not installed dependencies.
+The table intentionally separates the **current implementation** from selected future technologies.
 
-| Area | Technology |
-|---|---|
-| Framework | Flutter 3.47.6 (validated baseline) |
-| Language | Dart 3.13.5 (validated baseline) |
-| Native Environments | Android productFlavors / Xcode schemes and configurations (validated) |
-| Architecture | MVVM + Feature-First + Presentation / Domain / Data (planned) |
-| Reactive State | MobX + `flutter_mobx` (planned) |
-| Dependency Injection | GetIt + Injectable (planned) |
-| Navigation | go_router (planned) |
-| Offline Database | ObjectBox (planned) |
-| Networking | Dio (planned) |
-| Backend | `api-bun` (integration planned) |
-| Authentication | Better Auth behind `AuthRepository` (Flutter adapter to be validated) |
-| JSON | json_serializable (planned) |
-| Secure Storage | flutter_secure_storage (planned) |
-| Biometrics | local_auth (planned) |
-| Connectivity | connectivity_plus (planned) |
-| Localization | Flutter `gen_l10n` + ARB (planned) |
-| UI Catalog | Widgetbook (planned) |
-| Unit / Widget Tests | flutter_test (starter test validated); mocktail planned |
-| E2E | Patrol (planned) |
-| Static Analysis | Dart analyzer / `flutter analyze` (validated locally) |
-| Architecture Rules | Custom analyzer plugin (`app_arch_lints`) (planned) |
-| Secrets | Gitleaks (planned) |
-| SAST | Opengrep (planned) |
-| Dependencies | Trivy (planned) |
-| Duplication | jscpd (planned) |
-| Android Native Analysis | Android Lint (planned) |
-| CI/CD | Woodpecker CI for this app (planned) |
+| Area | Technology | Status |
+|---|---|---|
+| Framework / Language | Flutter 3.47.6 / Dart 3.13.5 | Validated |
+| Native flavors | Android product flavors / iOS shared schemes | Validated |
+| Architecture | Feature-first MVVM foundation; layered feature boundaries | Implemented / enforced |
+| Dependency injection | GetIt 9.3.x + Injectable 3.x | Implemented |
+| Reactive state | MobX 2.7.x + `flutter_mobx` 2.4.x | Implemented (global theme) |
+| Testing | `flutter_test` (unit, DI and widget tests) | 44 PASS |
+| Static / architecture checks | `flutter analyze`; Analyzer 14.1.0; `tool/check_architecture.dart` | Blocking in CI |
+| Code generation | `build_runner`, `injectable_generator`, `mobx_codegen` | Implemented; generated sources versioned |
+| CI | Woodpecker, Gitea required status, Linux/amd64 VM104 | Validated |
+| Quality container | `app-flutter-ci:3.47.6-v1` | Validated (quality only) |
+| Navigation | `go_router` | Planned |
+| Offline database | ObjectBox | Planned |
+| Networking / serialization | Dio / `json_serializable` | Planned |
+| Authentication | Backend adapter / Better Auth integration | Planned |
+| Secure storage / biometrics | `flutter_secure_storage` / `local_auth` | Planned |
+| Connectivity / localization | `connectivity_plus` / `gen_l10n` + ARB | Planned |
+| UI catalog / E2E | Widgetbook / Patrol | Planned |
+| Security / additional analysis | Gitleaks, Opengrep, Trivy, jscpd, Android Lint | Planned |
+| Release distribution | Garage, Gitea Releases, signing and macOS iOS builds | Planned for this repository |
 
 ---
+
 ## 🏗️ Project Architecture
 
-The **target architecture** combines feature isolation with layered MVVM. These directories describe the intended evolution, not the current bootstrap filesystem; they should be introduced only when they contain real behavior.
+The application uses **one Dart entrypoint** and a composition root; only the implemented Home feature exists today. Domain, Data and other feature directories will be added when they contain real behavior.
 
 ```text
 lib/
-├── main.dart                        # Current shared entrypoint
-├── app/                             # Planned
+├── main.dart
+├── app/
+│   ├── app.dart
 │   ├── bootstrap/
+│   │   └── bootstrap.dart
 │   ├── di/
+│   │   ├── dependency_injection.dart
+│   │   └── dependency_injection.config.dart  # Generated and versioned
 │   ├── environment/
-│   ├── navigation/
-│   └── app.dart
-│
-├── features/                        # Planned
-│   ├── auth/
-│   │   ├── auth.dart                # Public API
-│   │   ├── presentation/
-│   │   │   ├── views/
-│   │   │   ├── widgets/
-│   │   │   ├── viewmodels/
-│   │   │   └── effects/
-│   │   ├── domain/
-│   │   │   ├── models/
-│   │   │   ├── errors/
-│   │   │   ├── repositories/
-│   │   │   └── usecases/
-│   │   └── data/
-│   │       ├── repositories/
-│   │       ├── remote/
-│   │       └── local/
-│   │
-│   └── profile/
-│       └── ...
-│
-└── shared/                          # Planned
-    ├── domain/
-    ├── data/
-    └── presentation/
+│   │   └── app_environment.dart
+│   └── theme/
+│       ├── app_theme.dart
+│       ├── theme_view_model.dart
+│       └── theme_view_model.g.dart            # Generated and versioned
+└── features/
+    └── home/
+        ├── home.dart                          # Public API
+        └── presentation/
+            └── views/
+                └── home_view.dart
 ```
 
-Directories should be introduced only when they contain real behavior. The architecture must not create empty layers or artificial use cases only to satisfy a diagram. Native flavors currently share `lib/main.dart`; separate `main_staging.dart` and `main_production.dart` entrypoints are not required.
+Additional project infrastructure:
+
+```text
+ci/artifacts.env
+ci/docker/flutter-quality/Dockerfile
+scripts/quality_flutter.sh
+tool/configure_app.dart
+tool/check_architecture.dart
+tool/architecture/architecture_checker.dart
+test/app/
+test/tool/architecture_checker_test.dart
+test/widget_test.dart
+.woodpecker/security-wake-x86.yml
+.woodpecker/test.yml
+```
 
 ### Dependency Flow
+
+The long-term layered model remains:
 
 ```text
 Presentation ─────► Domain ◄───── Data
 ```
 
-- **Presentation:** Views, Widgets, ViewModels, MobX state, and UI effects.
-- **Domain:** Business models, errors, repository contracts, and pure business rules.
-- **Data:** Repository implementations, networking, persistence, DTOs, entities, mappers, and secure-storage implementations.
-
-The Domain layer must not depend on Flutter, MobX, ObjectBox, Dio, GetIt, or platform APIs.
+The current `HomeView` is intentionally UI-only. The global theme state lives in `app/theme` and is passed to Home through a boolean and callback; Home never resolves GetIt or imports `app/theme`. The bootstrap resolves `ThemeViewModel` through Injectable/GetIt and passes it to `App`. Domain/Data repository implementations are **not** present yet.
 
 ---
 
 ## 📏 Architecture Guidelines
 
-### 1. Top-Level Boundaries
+The committed checker uses the **Dart Analyzer parser** for imports and exports (including relative and conditional directives), excluding recognized generated files. It runs using `dart run tool/check_architecture.dart` and fails with a non-zero exit code.
 
-```text
-app
- ↓
-features
- ↓
-shared
-```
+| Rule | Enforced restriction |
+|---|---|
+| `ARCH000` | Invalid Dart syntax in checked source files |
+| `ARCH001` | `features/**` cannot depend on `app/**` |
+| `ARCH002` | `shared/**` cannot depend on `app/**` or `features/**` |
+| `ARCH003` | `features/**` and `shared/**` cannot import/export GetIt |
+| `ARCH004` | Relative imports/exports cannot escape `lib/` |
+| `ARCH005` | Cross-feature imports/exports must use the target feature's public barrel (`features/<name>/<name>.dart`) |
+| `ARCH006` | Feature Domain cannot import local Data or Presentation |
+| `ARCH007` | Feature Data cannot import local Presentation |
+| `ARCH008` | MobX is restricted to feature/shared Presentation, `app/theme` and the approved app-level UI |
+| `ARCH009` | Direct GetIt imports are restricted to `app/bootstrap` and `app/di`; re-exporting is forbidden |
 
-- `app` composes features and shared infrastructure.
-- `features` may depend on `shared`.
-- `shared` must never depend on `features` or `app`.
-
-### 2. Feature Encapsulation
-
-Each feature exposes a public entry point:
-
-```dart
-import 'package:app_flutter/features/auth/auth.dart';
-```
-
-Deep imports from another feature are prohibited:
+Example public API:
 
 ```dart
-// ❌ Wrong
-import 'package:app_flutter/features/auth/data/repositories/auth_repository_impl.dart';
+import 'package:app_flutter/features/home/home.dart';
 ```
 
-The custom Dart analyzer plugin and CI are intended to enforce these boundaries once implemented.
+A feature must not deep-import another feature's `presentation/`, `domain/` or `data/` implementation. GetIt belongs to application composition; Views and business code receive their dependencies through constructors or explicit parameters.
 
-### 3. Constructor Injection
-
-Business code will receive dependencies through constructors:
-
-```dart
-class ProfileViewModel {
-  ProfileViewModel(this._repository);
-
-  final ProfileRepository _repository;
-}
-```
-
-Direct GetIt access inside repositories, Domain code, or ViewModels will be prohibited. GetIt remains restricted to the composition root, route/view composition, and test setup.
-
-### 4. Infrastructure Isolation
-
-- Views and ViewModels do not access Dio or ObjectBox directly.
-- ObjectBox entities stay inside Data.
-- Data never imports Presentation.
-- `BuildContext` does not belong inside ViewModels.
-- Credentials stay behind abstractions such as `AuthCredentialStore`.
+The `app_arch_lints` analyzer plugin is **not implemented**: the current, blocking architecture gate is the versioned custom command above. The checker validates direct source-level rules, not every possible transitive or runtime dependency.
 
 ---
+
 ## 🧩 Base App Configuration
 
-The project must remain easy to derive into a real production app.
-
-The **versioned, non-sensitive** identity and artifact configuration is implemented in:
-
-```text
-ci/artifacts.env
-```
-
-Current identity contract:
+The versioned, non-sensitive contract lives in [`ci/artifacts.env`](ci/artifacts.env). Current keys are:
 
 ```text
 APP_DISPLAY_NAME
@@ -251,38 +202,21 @@ GARAGE_ANDROID_PREFIX
 GARAGE_IOS_PREFIX
 ```
 
-The following tool is implemented and validated on Windows and macOS ARM64:
+After deliberate identity edits, apply and validate the supported native configuration:
 
 ```bash
 dart run tool/configure_app.dart --apply
 dart run tool/configure_app.dart --check
 ```
 
-`--apply` generates/applies the supported native identity files; `--check` detects drift against the canonical configuration. The latter also checks iOS flavor schemes, Xcode configurations, and `.xcconfig` references. Negative tests have verified that incorrect staging paths and a missing shared scheme fail the gate; changes are restored afterward. Running `--apply` repeatedly has been validated for idempotency.
+For normal local development and CI, run **`--check` only**, so unexpected drift fails rather than being silently rewritten. The tool synchronizes the supported Android and iOS identity settings, Xcode shared schemes/build configurations and related paths. Positive, negative and idempotency tests have been performed on Windows and macOS.
 
-```text
-ci/artifacts.env
-    ├── android/app/AppIdentity.properties
-    │     └── Android productFlavors / manifest placeholders
-    └── ios/Flutter/AppIdentity.xcconfig
-          ios/Flutter/AppIdentity-staging.xcconfig
-              └── Xcode configurations / schemes / Info.plist
-```
+The runtime `AppEnvironment` is selected strictly from Flutter's `appFlavor` (`production` or `staging`); unsupported or missing flavors fail instead of silently falling back. The project uses a single `lib/main.dart`, with `flutter.default-flavor: production` configured in `pubspec.yaml`.
 
-`DART_PACKAGE_NAME` is primarily a bootstrap/rebranding setting. The current identity tool does **not** provision signing credentials, CI pipelines, runtime endpoints, or release publishing. `ARTIFACT_BASENAME` and Garage configuration are defined for future CI use, not yet enforced end-to-end as an artifact/release gate.
-
-Environment-specific **non-sensitive** runtime configuration is planned in files such as:
-
-```text
-config/staging.json
-config/production.json
-```
-
-It may later be passed using `--dart-define-from-file`. These files do not currently form an implemented runtime environment layer. Secrets must never be stored in them. Signing credentials, CI tokens, private keys, storage credentials, and release tokens stay in CI secrets or local secure files.
-
-> Any value shipped inside the mobile binary must be treated as public. Client-side configuration is not a secret store.
+Native flavors do not yet configure separate backend endpoints. Future non-sensitive runtime settings may use versioned files and `--dart-define-from-file`; signing keys, storage credentials and CI tokens must **never** be checked into the repository or embedded as secrets in client binaries.
 
 ---
+
 ## 🔄 Reactive Offline-First Model
 
 *Planned architecture; ObjectBox and the repository flow have not yet been implemented.*
@@ -326,26 +260,33 @@ ViewModel / UI State
 
 `objectbox-model.json` will be part of the schema history and must be versioned when ObjectBox is introduced.
 
+
 ---
+
 ## 🧠 MVVM and Reactive State
 
-*Planned implementation.*
-
-MobX will be restricted to Presentation:
+The first working example is **global light/dark theming**:
 
 ```text
-Domain       → no MobX
-Data         → no MobX
-ViewModel    → MobX Store
-View        → Observer
+bootstrap (GetIt + Injectable)
+      │ ThemeViewModel
+      ▼
+App (MobX Observer)
+      │ themeMode / callback
+      ▼
+MaterialApp + HomeView
+      │ user toggles switch
+      └──────────────► ThemeViewModel.setDarkMode()
 ```
 
-ViewModels may expose observable state, computed values, commands/actions, and one-shot UI effects.
+`ThemeViewModel` owns a MobX `@observable` `ThemeMode` and an `@action`. Its generated store and Injectable registration are versioned. `App` observes the mode and provides `AppTheme.light` and `AppTheme.dark` to `MaterialApp`. The Home feature receives only `isDarkMode` and `onDarkModeChanged`, preserving feature boundaries.
 
-Navigation, dialogs, snackbars, and external actions are UI effects rather than durable state. ViewModels must not receive `BuildContext`.
-Shared application data should normally be shared through repositories/ObjectBox rather than global ViewModel instances.
+Both modes were validated in `production` and `staging` on Android and iOS. The default is currently light mode, and the preference is **not yet persisted**. No ObjectBox/reactive repository flow has been implemented.
+
+For future features, MobX stays in Presentation, Domain remains framework-independent, and shared data should generally be exposed via repositories rather than global feature ViewModels.
 
 ---
+
 ## 🔐 Security
 
 *The following is the planned security model; secure storage and authentication are not yet integrated.*
@@ -374,7 +315,9 @@ Credentials must never be stored in:
 
 Biometric access will use `local_auth` and protect local application access; it will not replace remote authentication.
 
+
 ---
+
 ## 🌍 Environments
 
 Native **production and staging flavors are implemented and validated** on Android and iOS. They share the single Dart entrypoint `lib/main.dart`.
@@ -390,47 +333,38 @@ Distinct installations and custom URL schemes have been tested side by side on a
 
 Non-sensitive runtime endpoints/configuration may later use versioned environment files and `--dart-define-from-file`. Native identity flavors do not by themselves configure different API endpoints. Production must not inherit development, local-network, or E2E security exceptions.
 
+
 ---
+
 ## 🚀 Running Locally
 
 ### Prerequisites
 
-- Flutter **3.47.6** / Dart **3.13.5** (validated local baseline).
-- Android Studio, Android SDK and compatible NDK for Android development.
-- macOS with Xcode **26.6** and iOS tooling for iOS development (validated Mac baseline).
-- iOS minimum deployment target: **15.0**.
+- Flutter **3.47.6**, Dart **3.13.5** (validated baseline).
+- Android Studio/SDK for Android development.
+- macOS with Xcode for iOS development (the validated Mac baseline used Xcode **26.6**); minimum iOS target **15.0**.
+- No backend, ObjectBox or live credentials are necessary for the current Home/theme demo.
 
-### Install Dependencies
+### Dependencies and Code Generation
 
 ```bash
 flutter pub get
+dart run build_runner build
 ```
 
-### Apply and Check App Identity
+Generated MobX and Injectable files are committed. Regenerate after annotations change and review generated diffs before committing.
 
-After changing any supported values in `ci/artifacts.env`:
+### Identity, Architecture, Formatting and Tests
 
 ```bash
-dart run tool/configure_app.dart --apply
 dart run tool/configure_app.dart --check
-```
-
-For regular development/CI validation, use `--check`; do not automatically rewrite identity files to hide drift.
-
-### Static Analysis
-
-```bash
-dart format --output=none --set-exit-if-changed tool
+dart run tool/check_architecture.dart
+dart format --output=none --set-exit-if-changed lib test tool
 flutter analyze
-```
-
-### Tests
-
-```bash
 flutter test
 ```
 
-The initial Flutter template widget test passes. Feature-level unit, repository, ViewModel and E2E suites are still planned. Code generation via `build_runner` is also planned and is not a bootstrap prerequisite yet.
+These are the same validation commands used by [`scripts/quality_flutter.sh`](scripts/quality_flutter.sh) in CI, after dependency resolution.
 
 ### Android
 
@@ -440,10 +374,7 @@ flutter run --flavor staging
 
 flutter build apk --debug --flavor production
 flutter build apk --debug --flavor staging
-flutter build apk --debug                  # default: production
 ```
-
-The debug APKs are produced as `app-production-debug.apk` and `app-staging-debug.apk` in `build/app/outputs/flutter-apk/`.
 
 ### iOS (macOS only)
 
@@ -453,148 +384,102 @@ flutter run --flavor staging
 
 flutter build ios --debug --flavor production --no-codesign
 flutter build ios --debug --flavor staging --no-codesign
-flutter build ios --debug --no-codesign   # default: production
 ```
 
-These iOS build commands produce an **unsigned device-targeted `.app`** for build validation; running the flavors has been validated separately on Simulator. `build/ios/iphoneos/Runner.app` is overwritten by the subsequent flavor build. Neither proves signed distribution to physical devices.
+The two flavors were run in Android emulators and an iOS Simulator; both support switching the theme. Debug/unsigned builds do **not** imply release signing or device distribution is ready.
 
 ---
+
 ## 🧪 Testing & Quality
 
-### Validated Local Baseline
+### Current Validated Baseline
 
-- `dart format --output=none --set-exit-if-changed tool`: PASS.
-- `dart run tool/configure_app.dart --check`: `APP_IDENTITY_CHECK=PASS` on Windows/macOS.
-- `flutter analyze`: no issues.
-- `flutter test`: starter widget test (1 passing test).
-- Android: explicit production/staging and implicit production debug APK builds; package, label, and URL scheme inspected in packaged manifests; both apps launched via deep links on emulator.
-- iOS: explicit production/staging and implicit production unsigned debug builds; final `Info.plist` inspected; both apps installed and launched via deep links on Simulator.
-- Identity configurator: repeated `--apply` plus `--check`; negative tests for an invalid iOS `.xcconfig` reference and a missing `staging.xcscheme` returned FAIL, then PASS after restoration.
+The current suite contains **44 passing tests**: **35 checker tests** for the architecture gate and **9 application tests** (environment, dependency injection, MobX and widgets). These passed on Windows, macOS and the dedicated Linux/amd64 Flutter CI image.
 
-**Scope:** these are local validations, not a Flutter Woodpecker pipeline, release-signing gate, Patrol test suite, or production-device certification.
+| Check | Command / contract | Current status |
+|---|---|---|
+| Identity | `dart run tool/configure_app.dart --check` → `APP_IDENTITY_CHECK=PASS` | Blocking |
+| Architecture | `dart run tool/check_architecture.dart` → `ARCHITECTURE_CHECK=PASS` | Blocking |
+| Formatting | `dart format --output=none --set-exit-if-changed lib test tool` | Blocking |
+| Analysis | `flutter analyze` | Blocking; 0 issues |
+| Tests | `flutter test` | Blocking; 44 PASS |
+| Combined | `bash scripts/quality_flutter.sh` → `FLUTTER_QUALITY_GATE=PASS` | Blocking in Woodpecker |
 
-### Planned Test Levels
+The architecture gate was validated with deliberate source violations that returned `ARCHITECTURE_CHECK=FAIL` and exit code `1`. The PR-required Woodpecker check was also validated with a real **PASS → FAIL → PASS** cycle: an intentional `ARCH001` violation blocked merge in Gitea, and its removal restored eligibility. The temporary probe is not present in the final `main` tree.
 
-```text
-Pure Unit Tests
-→ Domain rules, errors, mappers
+The checker is a **source import/export boundary gate**; it is not a substitute for domain unit tests, integration tests, dependency scanning or end-to-end validation.
 
-ViewModel Tests
-→ commands, MobX state, computed values, UI effects
-
-Repository Integration Tests
-→ repository behavior with a real temporary ObjectBox store
-
-Widget Tests
-→ feature View behavior
-
-Patrol E2E
-→ Android and iOS user flows
-```
-
-Repository tests should validate the real reactive persistence path when relevant:
+### Planned Additional Coverage
 
 ```text
-write
-→ ObjectBox
-→ watch()
-→ Repository stream
-→ updated state
+Pure domain and ViewModel tests for real features
+Repository integration with temporary ObjectBox stores
+Offline reactivity / watch() end-to-end across layers
+Business and authored coverage baselines (no arbitrary threshold)
+Generated-code drift validation
+Gitleaks / Opengrep / Trivy
+jscpd diagnostics / Android Lint
+Patrol Android and iOS E2E
+Build/release smoke tests and signing checks
 ```
 
-### Planned Quality Gate
-
-```text
-Code generation
-ObjectBox schema consistency
-Dart format
-Flutter analyze
-Architecture boundaries
-Unit tests
-Widget tests
-Business coverage
-Authored coverage diagnostics
-Gitleaks
-Opengrep
-Trivy
-jscpd
-Android Lint
-Production build smoke test
-```
-
-The project follows an incremental gate policy:
-
-```text
-measure
-→ understand findings
-→ fix real issues
-→ define a baseline
-→ validate positive and negative paths
-→ make the gate blocking
-```
-
-Coverage thresholds are intentionally **not defined yet**. The project will first measure real business coverage after the initial features are implemented.
-
-jscpd starts as a diagnostic tool; the project does not target artificial `0%` duplication.
+Quality gates are added incrementally: measure findings, correct them, prove positive and negative behaviors, and only then make checks mandatory. Avoid artificially aiming for 100% coverage or zero duplication.
 
 ---
+
 ## ⚙️ CI/CD
 
-The project **plans** to use self-hosted Woodpecker CI. Flutter-specific pipelines and release signing are not yet implemented or validated in this repository.
+**Implemented:** self-hosted Woodpecker quality CI for pull requests targeting `main`, pushes to `main` and qualifying manual quality runs. Gitea is the source of truth; GitHub is the read-only mirror for this workflow.
 
 ```text
-Pull Request / Push
-        │
-        ├── ARM64 / always-on
-        │     └── lightweight preflight / VM wake
-        │
-        └── Linux amd64 agent
-              ├── dependency restore
-              ├── code generation
-              ├── format / analyzer
-              ├── architecture rules
-              ├── tests / coverage
-              ├── security scans
-              ├── Android Lint
-              └── Android build validation
-Manual iOS / Release
-        │
-        └── macOS arm64 agent
-              ├── Xcode / iOS build
-              ├── Patrol iOS
-              ├── signing / packaging
-              └── release steps
+Gitea PR targeting main / push to main
+              │
+              ▼
+.woodpecker/security-wake-x86.yml
+  always-on Linux/ARM64 Woodpecker agent
+  Energy Manager wake / readiness for VM104
+              │ depends_on
+              ▼
+.woodpecker/test.yml
+  VM104 Woodpecker agent (linux/amd64; role: build-linux)
+  local image: app-flutter-ci:3.47.6-v1 (pull: false)
+              │
+              ▼
+scripts/quality_flutter.sh
+  pub get → format → identity → architecture → analyze → tests
+              │
+              ▼
+Gitea commit status: ci/woodpecker/pr/test
+  mandatory to merge into protected main
 ```
 
-Operational rules:
+The quality image is defined in [`ci/docker/flutter-quality/Dockerfile`](ci/docker/flutter-quality/Dockerfile): Ubuntu 24.04 with a pinned Flutter 3.47.6 revision and Dart 3.13.5. It is **quality-only** (no Android SDK/NDK, signing, publishing or release secrets). The prebuilt image was validated on VM104; the workflow uses a locally available image rather than pulling it from a registry.
 
-- Gitea is the source of truth for this repository.
-- GitHub is the external mirror; mirroring is separate from Flutter CI/release validation.
-- Self-hosted amd64 infrastructure will handle Linux/Android heavy quality workloads.
-- macOS will handle Xcode/iOS workloads.
-- Garage may store internal artifacts.
-- Gotify may report pipeline results.
-- E2E/instrumented builds must not be published as final Production artifacts; Production is rebuilt clean after E2E gates pass.
+The Gitea `main` branch has a protection rule with direct/force push disabled and the required status context **`ci/woodpecker/pr/test`**. The check was exercised in PR #5 with valid code, an intentional architecture failure, then a restored clean result; the PR was merged as commit `ced1947`. A separate wake workflow is infrastructure support, **not** a substitute for the required quality status.
+
+The Linux/amd64 executor is used for routine quality checks. The macOS/ARM64 agent is reserved for **future manual iOS builds** and **tag-triggered releases**; those workflows do not exist in this repository yet. Android build pipelines, artifact publishing, Garage, Gotify, security scanning and E2E are also future steps.
+
+CI jobs handling untrusted PRs must not receive signing keys, publication credentials or other release secrets. Configuration and specific wake endpoints are managed privately, not documented as reusable public values here.
 
 ---
+
 ## 📐 Project Guidelines
 
-- Prefer constructor injection over Service Locator access inside business code.
-- Keep Domain independent from Flutter and infrastructure libraries.
-- Keep ObjectBox entities inside Data.
-- Keep credentials outside ObjectBox.
-- Do not share global ViewModels when shared repository state solves the problem.
-- Do not add architectural layers without real behavior.
-- Do not suppress analyzer/security findings only to make CI green.
-- Do not create artificial abstractions only to reduce duplication metrics.
-- Do not create tests only to increase coverage.
-- Measure baselines before defining thresholds.
-- Add and validate one major quality gate at a time.
-- Keep E2E configuration out of final Production artifacts.
-- Keep product identity and environment values centralized; do not scatter app names, IDs, schemes, endpoints, or artifact names through business code.
-- Treat any value embedded in the client binary as public; real secrets stay outside source and release artifacts.
+- Keep the README honest: distinguish **validated**, **implemented** and **planned** behavior.
+- Treat Gitea as the writable source of truth and GitHub as a mirror; develop through protected-branch PRs.
+- Preserve the `main` required quality context; do not bypass failed checks to merge changes.
+- Use the feature's public API for cross-feature imports. Keep Domain independent of Data, Presentation and infrastructure.
+- Keep GetIt confined to the application composition root; use constructor injection and explicit UI parameters.
+- Keep MobX in presentation/UI state. Do not introduce MobX, ObjectBox or platform APIs into Domain models.
+- Keep generated files versioned and regenerate only when annotations change.
+- Create layers and shared abstractions only for real behavior; avoid artificial coverage or duplication targets.
+- Put no client-side secrets in Dart defines, source files, binary assets or ObjectBox. Keep signing/publishing secrets outside PR checks.
+- Validate quality/security changes incrementally, including negative tests before making gates blocking.
+- Keep the Flutter CI image separate from the validated CI environments of sibling projects.
+- Reserve the macOS agent for iOS-specific builds/releases, not routine Linux quality checks.
 
 ---
+
 ## 📚 Related Projects
 
 - [Brunno13/app-react-native](https://github.com/Brunno13/app-react-native) — feature isolation, architecture boundaries, security gates, E2E, and React Native CI/CD reference.
